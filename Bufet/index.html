@@ -1,0 +1,1244 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>F&B Buffet Menu Builder — Frontend (PDF-accurate)</title>
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Flatpickr (date picker) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+    <!-- html2pdf for PDF export -->
+    <script src="https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+
+    <style>
+        :root {
+            --bg: #f4f7fb;
+            --card: #ffffff;
+            --muted: #7b8490;
+            --accent: #0b74de;
+            --accent-600: #0a66c2;
+            --green: #27ae60;
+            --red: #e74c3c;
+            --yellow: #f1c40f;
+            --radius: 14px;
+            --shadow: 0 6px 18px rgba(18, 40, 60, 0.06);
+            font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            background: var(--bg);
+            color: #12202b;
+            -webkit-font-smoothing: antialiased
+        }
+
+        .container {
+            max-width: 1440px;
+            margin: 12px auto;
+            padding: 12px;
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 20px;
+            align-items: start
+        }
+
+        header {
+            grid-column: 1/-1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px
+        }
+
+        header h1 {
+            font-size: 20px;
+            margin: 0;
+            font-weight: 700
+        }
+
+        header p {
+            margin: 2px 0 0 0;
+            color: var(--muted);
+            font-size: 13px
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 12px;
+            background: var(--card);
+            border: 1px solid #e8edf3;
+            color: #123;
+            cursor: pointer;
+            font-weight: 600
+        }
+
+        .btn.ghost {
+            background: transparent;
+            border: 1px solid #e8edf3
+        }
+
+        .btn.primary {
+            background: var(--accent);
+            color: white;
+            border: none;
+            box-shadow: 0 6px 14px rgba(11, 116, 222, 0.16)
+        }
+
+        /* Main left column */
+        .left {
+            display: flex;
+            flex-direction: column;
+            gap: 14px
+        }
+
+        /* Card */
+        .card {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 18px;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(15, 35, 55, 0.03)
+        }
+
+        .card.menu {
+            padding: 22px
+        }
+
+        /* Menu details layout */
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr) 220px;
+            gap: 12px;
+            align-items: start
+        }
+
+        label {
+            display: block;
+            font-size: 11px;
+            /* Slightly smaller to fit better */
+            color: var(--muted);
+            margin-bottom: 6px;
+            font-weight: 600;
+        }
+
+        .control {
+            display: block
+        }
+
+        input[type="text"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            background: var(--card);
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        input[type="text"]:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(11, 116, 222, 0.08);
+        }
+
+        input[type="text"]::placeholder {
+            color: #c8d0da
+        }
+
+        textarea {
+            min-height: 64px;
+            resize: vertical;
+            padding-top: 12px;
+            padding-bottom: 12px
+        }
+
+        .small-card {
+            padding: 12px;
+            border-radius: 12px;
+            background: linear-gradient(180deg, #fff, #fbfdff);
+            border: 1px solid #eef3f8
+        }
+
+        /* Chips row */
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 8px 6px
+        }
+
+        .chip {
+            padding: 8px 12px;
+            border-radius: 20px;
+            background: #fff;
+            border: 1px solid #eef3f8;
+            color: #17202a;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px
+        }
+
+        .chip.active {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            box-shadow: 0 4px 10px rgba(11, 116, 222, 0.12)
+        }
+
+        /* Items list */
+        .items-wrap {
+            margin-top: 6px
+        }
+
+        .items-list {
+            max-height: 520px;
+            overflow: auto;
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid rgba(230, 236, 243, 0.8);
+            background: linear-gradient(180deg, #fff, #fff)
+        }
+
+        .item-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            background: #fff;
+            border: 1px solid #f2f6fa;
+            cursor: pointer;
+            transition: all .12s
+        }
+
+        .item-row:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 18px rgba(6, 18, 40, 0.04)
+        }
+
+        .item-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0
+        }
+
+        .checkbox {
+            width: 18px;
+            height: 18px;
+            border-radius: 6px;
+            border: 1px solid #d7dee8;
+            display: inline-block;
+            flex-shrink: 0;
+            transition: all .12s
+        }
+
+        .item-name {
+            font-size: 15px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis
+        }
+
+        .item-meta {
+            font-size: 12px;
+            color: var(--muted)
+        }
+
+        .type-pill {
+            padding: 6px 10px;
+            border-radius: 14px;
+            font-size: 12px;
+            border: 1px solid #eef3f8;
+            font-weight: 700;
+            min-width: 84px;
+            text-align: center
+        }
+
+        .type-veg {
+            background: #ecf9f1;
+            border-color: rgba(39, 174, 96, 0.12);
+            color: var(--green)
+        }
+
+        .type-nv {
+            background: #fff2f2;
+            border-color: rgba(231, 76, 60, 0.08);
+            color: var(--red)
+        }
+
+        .type-egg {
+            background: #fffbec;
+            border-color: rgba(241, 196, 15, 0.08);
+            color: var(--yellow)
+        }
+
+        /* Right preview column */
+        .right {
+            display: flex;
+            flex-direction: column;
+            gap: 12px
+        }
+
+        .preview-card {
+            position: sticky;
+            top: 20px
+        }
+
+        .preview-list {
+            max-height: 420px;
+            overflow: auto;
+            padding: 10px;
+            border-radius: 8px
+        }
+
+        .preview-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center
+        }
+
+        .preview-title h3 {
+            margin: 0;
+            font-size: 16px
+        }
+
+        .preview-meta {
+            color: var(--muted);
+            font-size: 12px
+        }
+
+        .preview-cat {
+            font-weight: 700;
+            margin-top: 10px;
+            color: #1f2a33
+        }
+
+        .preview-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 8px 0
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0
+        }
+
+        /* footer */
+        .actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            padding-top: 8px
+        }
+
+        .muted {
+            color: var(--muted);
+            font-size: 13px
+        }
+
+        /* === Menu Card Layout === */
+        .menu {
+            padding: 18px;
+        }
+
+        .menu-layout {
+            display: block;
+            /* Remove grid to use full width */
+            width: 100%;
+        }
+
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px 18px;
+            /* Balanced spacing */
+            margin-bottom: 25px;
+            /* More space before notes */
+        }
+
+        /* Today box styling - high fidelity */
+        .today-card {
+            border: 1px solid #e8edf3;
+            border-radius: 14px;
+            padding: 10px 20px;
+            text-align: center;
+            background: #fff;
+            min-width: 110px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+        }
+
+        .today-label {
+            font-size: 10px;
+            color: #94a3b8;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 2px;
+        }
+
+        .today-date {
+            font-size: 16px;
+            font-weight: 800;
+            color: #1e293b;
+        }
+
+        .menu-grid input,
+        .menu-grid select,
+        .menu-grid textarea {
+            box-sizing: border-box;
+        }
+
+        .menu-notes {
+            grid-column: 1 / -1;
+        }
+
+        .menu-side {
+            position: sticky;
+            top: 16px;
+        }
+
+        .small-card {
+            background: #fff;
+            border-radius: 14px;
+            padding: 14px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+        }
+
+        label {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        #notes {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        /* Notes + Suggested side-by-side */
+        .notes-row {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            /* Wider side for suggested/selected */
+            gap: 20px;
+            margin-top: 10px;
+            align-items: stretch;
+        }
+
+        .notes-col textarea {
+            width: 100%;
+            height: 100%;
+            min-height: 120px;
+            /* Taller notes box */
+            border-radius: 12px;
+        }
+
+        .suggested-col .small-card {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 18px;
+            border-radius: 16px;
+        }
+
+        /* small blue loader (top-right of preview card) */
+        .loader {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--accent-600);
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid rgba(11, 116, 222, 0.15);
+            border-top-color: var(--accent-600);
+            animation: spin .85s linear infinite;
+            box-shadow: 0 2px 6px rgba(11, 116, 222, 0.12);
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Printable (PDF) exactness improvements */
+        .printable {
+            font-family: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
+            color: #000;
+            background: #fff;
+            padding: 40px;
+            width: 794px;
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+            line-height: 1.4;
+            font-size: 11px;
+        }
+
+        .printable .title {
+            text-align: center;
+            font-weight: 700;
+            font-size: 20px;
+            margin-bottom: 2px;
+            color: #111;
+        }
+
+        .printable .subtitle {
+            text-align: center;
+            font-size: 12px;
+            color: #444;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .printable .meta-row {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 8px;
+            font-size: 10px;
+        }
+
+        .printable .meta-item {
+            display: flex;
+            gap: 4px;
+        }
+
+        .printable .notes-box {
+            border: 1px solid #000;
+            padding: 8px 12px;
+            margin: 10px 0 15px 0;
+            font-weight: 600;
+            font-size: 10px;
+            min-height: 30px;
+        }
+
+        .printable .section {
+            margin-top: 15px;
+        }
+
+        .printable .cat-title {
+            font-weight: 800;
+            margin-top: 15px;
+            margin-bottom: 8px;
+            font-size: 11px;
+            color: #000;
+            text-transform: uppercase;
+            border-top: 1px solid #eee;
+            padding-top: 8px;
+        }
+
+        .printable .item-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding: 3px 0;
+        }
+
+        .printable .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .printable .item-name {
+            font-weight: 700;
+            font-size: 10.5px;
+            flex: 1;
+        }
+
+        /* Footer */
+        .printable .footer {
+            margin-top: 40px;
+            padding-top: 10px;
+            font-size: 9px;
+            color: #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            position: relative;
+        }
+
+        .printable .footer-url {
+            max-width: 80%;
+            word-break: break-all;
+            text-decoration: underline;
+            color: #0000EE;
+        }
+
+        .printable .page-num {
+            font-weight: 600;
+        }
+
+
+        /* responsive */
+        @media(max-width:1080px) {
+            .container {
+                grid-template-columns: 1fr
+            }
+
+            .right {
+                order: 2
+            }
+
+            .menu-layout {
+                grid-template-columns: 1fr
+            }
+
+            .notes-row {
+                grid-template-columns: 1fr
+            }
+
+            .menu-side {
+                position: static
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+
+        <header>
+            <div>
+                <h1>F&B Buffet Menu Builder</h1>
+                <p class="muted">Design daily buffet menus from your master item list.</p>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+                <button class="btn">Chef View</button>
+            </div>
+        </header>
+
+        <!-- LEFT -->
+        <div class="left">
+
+            <!-- Menu details -->
+            <div class="card menu">
+                <div class="menu-layout">
+                    <div>
+                        <div
+                            style="display:flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                            <h2 style="margin: 0; font-size: 18px; font-weight: 700;">Menu details</h2>
+                            <div class="today-card">
+                                <div class="today-label">TODAY</div>
+                                <div class="today-date" id="todayDate">--/--/----</div>
+                            </div>
+                        </div>
+                        <div class="menu-grid">
+
+                            <div>
+                                <label>Date</label>
+                                <input id="date" class="control" type="text" />
+                            </div>
+
+                            <div>
+                                <label>Meal</label>
+                                <select id="mealSelect" class="control"></select>
+                            </div>
+
+                            <div>
+                                <label>No. of Pax</label>
+                                <input id="pax" type="text" placeholder="e.g. 60" />
+                            </div>
+
+                            <div>
+                                <label>Charges per Person</label>
+                                <input id="charge" type="text" placeholder="e.g. 500.00" />
+                            </div>
+
+                            <div>
+                                <label>Chef / Created by</label>
+                                <input id="chef" type="text" placeholder="e.g. Chef Naman" />
+                            </div>
+
+                        </div>
+
+                        <div class="notes-row">
+
+                            <!-- LEFT: NOTES -->
+                            <div class="notes-col">
+                                <label>Notes (optional)</label>
+                                <textarea id="notes"
+                                    placeholder="Group name, special requests, veg-only, Jain corner, etc."></textarea>
+                            </div>
+
+                            <!-- RIGHT: SUGGESTED -->
+                            <div class="suggested-col">
+                                <div class="small-card">
+                                    <div style="display:flex;justify-content:space-between;align-items:center">
+                                        <div style="font-size:12px;color:var(--muted)">SUGGESTED ITEMS</div>
+                                        <!-- small loader (shown when data loading) -->
+                                        <div id="loader" class="loader hidden" aria-hidden="true">
+                                            <div class="spinner" aria-hidden="true"></div>
+                                            <div style="font-size:12px;color:var(--accent-600)">loading</div>
+                                        </div>
+                                    </div>
+
+                                    <div style="font-weight:700;margin-top:6px" id="suggested">15–20 for Lunch</div>
+                                    <hr style="margin:10px 0;border:none;border-top:1px solid #eef3f8" />
+                                    <div style="font-size:12px;color:var(--muted)">SELECTED ITEMS</div>
+                                    <div id="selectedCount" style="font-weight:700;margin-top:6px">0</div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- content card -->
+            <div class="card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <div style="font-weight:700">Pick dishes from master list</div>
+                    <div class="muted">Tap to add / remove from today's buffet</div>
+                </div>
+
+                <!-- chips -->
+                <div class="chips" id="categoryChips"></div>
+
+                <div class="items-wrap">
+                    <div class="items-list" id="itemsList"></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- RIGHT -->
+        <aside class="right">
+
+            <div class="card preview-card" id="previewCard">
+                <div class="preview-title">
+                    <div>
+                        <h3>The InHoCo</h3>
+                        <div class="preview-meta">Buffet Menu • <span id="previewMeal">Lunch</span></div>
+                    </div>
+                    <div style="text-align:right">
+                        <div class="preview-meta">Date</div>
+                        <div id="previewDate" style="font-weight:700">07-02-2026</div>
+                    </div>
+                </div>
+
+                <div style="margin-top:12px" class="preview-list card" id="previewList">
+                    <!-- preview items -->
+                </div>
+
+                <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
+                    <div class="muted">print preview</div>
+                    <div style="display:flex;gap:8px">
+                        <button class="btn" id="clearBtn">Clear selection</button>
+                        <button class="btn primary" id="pdfBtn">
+                            <span id="pdfBtnText">Generate PDF</span>
+                            <span id="pdfSpinner" class="spinner hidden"
+                                style="width:14px;height:14px;border-width:2px"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </aside>
+    </div>
+
+    <script>
+        /*******************************
+         *  SAMPLE DATA (fallback)
+         *******************************/
+        const SAMPLE_DATA = {
+            "Breakfast": {
+                "Continental": [{ name: "Corn & Peas", type: "Veg" }, { name: "Sandwiches", type: "Veg" }],
+                "Essentials": [{ name: "Jam & Butter", type: "Veg" }, { name: "Fresh Fruit", type: "Veg" }],
+                "Beverages": [{ name: "Tea", type: "Veg" }, { name: "Coffee", type: "Veg" }]
+            },
+            "Lunch": {
+                "Soups": [{ name: "Sweet Corn Soup", type: "Veg" }],
+                "Salads": [{ name: "Kachumber Salad", type: "Veg" }],
+                "Breads": [{ name: "Naan", type: "Veg" }],
+                "Main Course - Non Veg": [{ name: "Kadhai Chicken", type: "Nonveg" }],
+                "Lentils": [{ name: "Dal Tadka", type: "Veg" }],
+                "Paneer": [{ name: "Paneer Lababdar", type: "Veg" }],
+                "Vegetables": [{ name: "Mix Veg", type: "Veg" }],
+                "Rice": [{ name: "Steamed Rice", type: "Veg" }],
+                "Essentials": [{ name: "Jam & Butter", type: "Veg" }, { name: "White | Brown Bread", type: "Veg" }, { name: "Cut Fruits", type: "Veg" }],
+                "Beverages": [{ name: "Fruit Juices", type: "Veg" }, { name: "Tea", type: "Veg" }, { name: "Coffee", type: "Veg" }],
+                "Egg - Essential": [{ name: "Eggs To Order", type: "Egg" }]
+            },
+            "Dinner": {
+                "Starters": [{ name: "Paneer Tikka", type: "Veg" }, { name: "Tandoori Chicken", type: "Nonveg" }]
+            }
+        };
+
+        // ---------- STATE ----------
+        const STATE = {
+            data: {},
+            meal: 'Lunch',
+            categories: [],
+            activeCategory: '',
+            selected: {} // uid -> { meal, category, name, type }
+        };
+
+        // ---------- UTILS ----------
+        function formatDateToIndian(d) {
+            if (!d) return '';
+            const date = (d instanceof Date) ? d : new Date(d);
+            const dd = String(date.getDate()).padStart(2, '0');
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const yyyy = date.getFullYear();
+            return `${dd}-${mm}-${yyyy}`;
+        }
+
+        function safeParseNumber(val) {
+            if (val === null || val === undefined) return 0;
+            const cleaned = String(val).replace(/[^\d.\-]/g, '').trim();
+            const n = parseFloat(cleaned);
+            return isNaN(n) ? 0 : n;
+        }
+
+        function formatCurrencyINR(value) {
+            try {
+                return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value);
+            } catch (e) {
+                return '₹' + Number(value).toFixed(2);
+            }
+        }
+
+        function uidFor(item, category, idx) {
+            return btoa(`${STATE.meal}||${category}||${item.name}||${idx}`);
+        }
+
+        function typeClass(t) {
+            if (!t) return 'type-veg';
+            t = String(t).toLowerCase();
+            if (t.includes('egg')) return 'type-egg';
+            if (t.includes('non')) return 'type-nv';
+            if (t.includes('veg') && !t.includes('non')) return 'type-veg';
+            return 'type-veg';
+        }
+        function dotColor(t) {
+            if (!t) return '#27ae60';
+            t = String(t).toLowerCase();
+            if (t.includes('egg')) return '#f1c40f';
+            if (t.includes('non')) return '#e74c3c';
+            if (t.includes('veg') && !t.includes('non')) return '#27ae60';
+            return '#27ae60';
+        }
+
+        // Loader toggle (small blue)
+        function showLoader(on) {
+            const loader = document.getElementById('loader');
+            if (!loader) return;
+            if (on) loader.classList.remove('hidden');
+            else loader.classList.add('hidden');
+        }
+
+        // PDF button spinner toggle
+        function setPdfProcessing(on) {
+            const spinner = document.getElementById('pdfSpinner');
+            const text = document.getElementById('pdfBtnText');
+            if (on) {
+                spinner.classList.remove('hidden');
+                text.textContent = 'Generating...';
+            } else {
+                spinner.classList.add('hidden');
+                text.textContent = 'Generate PDF';
+            }
+        }
+
+        // ---------- DATA FETCH ----------
+        function fetchData(meal) {
+            showLoader(true);
+            STATE.meal = meal || STATE.meal || 'Lunch';
+            // If running with Apps Script available
+            if (window.google && google && google.script && google.script.run) {
+                google.script.run.withSuccessHandler(res => {
+                    STATE.data = res || {};
+                    initRenderAfterData();
+                    showLoader(false);
+                }).withFailureHandler(err => {
+                    console.error('Server fetch failed', err);
+                    // fallback to sample
+                    STATE.data = SAMPLE_DATA;
+                    initRenderAfterData();
+                    showLoader(false);
+                }).getAllBuffetData();
+            } else {
+                // quick fallback - emulate small delay to show loader
+                setTimeout(() => {
+                    STATE.data = SAMPLE_DATA;
+                    initRenderAfterData();
+                    showLoader(false);
+                }, 450); // small delay for visual feedback
+            }
+        }
+
+        function initRenderAfterData() {
+            populateMealSelect();
+            const mealData = STATE.data[STATE.meal] || {};
+            STATE.categories = Object.keys(mealData);
+            STATE.activeCategory = STATE.categories[0] || null;
+            renderChips();
+            renderItems();
+            loadPersistedSelection();
+            renderPreview();
+            updateCounts();
+            initFlatpickr();
+            setPreviewHeader();
+        }
+
+        // ---------- RENDERERS ----------
+        function populateMealSelect() {
+            const sel = document.getElementById('mealSelect');
+            sel.innerHTML = '';
+            const meals = Object.keys(STATE.data);
+            if (meals.length === 0) {
+                ['Breakfast', 'Lunch', 'Dinner', 'Hi-Tea'].forEach(m => {
+                    const o = document.createElement('option'); o.value = m; o.textContent = m; sel.appendChild(o);
+                });
+            } else {
+                meals.forEach(m => {
+                    const o = document.createElement('option'); o.value = m; o.textContent = m; sel.appendChild(o);
+                });
+            }
+            sel.value = STATE.meal;
+            sel.onchange = function () { fetchData(this.value); };
+        }
+
+        function renderChips() {
+            const wrap = document.getElementById('categoryChips'); wrap.innerHTML = '';
+            (STATE.categories || []).forEach(cat => {
+                const el = document.createElement('div');
+                el.className = 'chip' + (cat === STATE.activeCategory ? ' active' : '');
+                el.textContent = cat;
+                el.onclick = () => { STATE.activeCategory = cat; renderChips(); renderItems(); };
+                wrap.appendChild(el);
+            });
+        }
+
+        function renderItems() {
+            const list = document.getElementById('itemsList'); list.innerHTML = '';
+            const mealData = STATE.data[STATE.meal] || {};
+            const items = (mealData[STATE.activeCategory] || []);
+            items.forEach((item, idx) => {
+                const row = document.createElement('div'); row.className = 'item-row';
+                const left = document.createElement('div'); left.className = 'item-left';
+                const cb = document.createElement('div'); cb.className = 'checkbox';
+                const metaWrap = document.createElement('div'); metaWrap.style.minWidth = '0';
+                const name = document.createElement('div'); name.className = 'item-name'; name.textContent = item.name;
+                const meta = document.createElement('div'); meta.className = 'item-meta'; meta.textContent = STATE.activeCategory;
+                metaWrap.appendChild(name); metaWrap.appendChild(meta);
+                left.appendChild(cb); left.appendChild(metaWrap);
+
+                const right = document.createElement('div');
+                const pill = document.createElement('div'); pill.className = 'type-pill ' + typeClass(item.type); pill.textContent = (item.type || 'Veg').toUpperCase();
+                right.appendChild(pill);
+
+                row.appendChild(left); row.appendChild(right);
+
+                const id = uidFor(item, STATE.activeCategory, idx);
+                row.onclick = function (e) {
+                    e.preventDefault();
+                    toggleSelect(id, item, STATE.activeCategory, idx, cb);
+                    this.classList.toggle('selected');
+                };
+
+                // pre-mark
+                if (STATE.selected[id]) {
+                    cb.style.background = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#0b74de';
+                    cb.style.borderColor = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#0b74de';
+                }
+
+                list.appendChild(row);
+            });
+        }
+
+        function toggleSelect(id, item, category, idx, cb) {
+            if (STATE.selected[id]) {
+                delete STATE.selected[id];
+                if (cb) { cb.style.background = ''; cb.style.borderColor = '#d7dee8'; }
+            } else {
+                STATE.selected[id] = { meal: STATE.meal, category, name: item.name, type: item.type || 'Veg' };
+                if (cb) { cb.style.background = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#0b74de'; cb.style.borderColor = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#0b74de'; }
+            }
+            persistSelection();
+            updateCounts();
+            renderPreview();
+        }
+
+        function updateCounts() {
+            const c = Object.keys(STATE.selected).length;
+            document.getElementById('selectedCount').textContent = c;
+        }
+
+        function setPreviewHeader() {
+            document.getElementById('previewMeal').textContent = STATE.meal;
+            const dateVal = document.getElementById('date').value;
+            document.getElementById('previewDate').textContent = dateVal || formatDateToIndian(new Date());
+        }
+
+        function renderPreview() {
+            const wrap = document.getElementById('previewList'); wrap.innerHTML = '';
+            const grouped = {};
+            Object.values(STATE.selected).forEach(it => {
+                if (!grouped[it.category]) grouped[it.category] = [];
+                grouped[it.category].push(it);
+            });
+
+            if (Object.keys(grouped).length === 0) {
+                const info = document.createElement('div'); info.className = 'muted'; info.textContent = 'No items selected yet.';
+                wrap.appendChild(info);
+            } else {
+                Object.keys(grouped).forEach(cat => {
+                    const h = document.createElement('div'); h.className = 'preview-cat'; h.textContent = cat;
+                    wrap.appendChild(h);
+                    grouped[cat].forEach(it => {
+                        const r = document.createElement('div'); r.className = 'preview-item';
+                        const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = dotColor(it.type);
+                        const txt = document.createElement('div'); txt.textContent = it.name;
+                        r.appendChild(dot); r.appendChild(txt);
+                        wrap.appendChild(r);
+                    });
+                });
+            }
+            setPreviewHeader();
+        }
+
+        // ---------- localStorage persistence ----------
+        function persistSelection() {
+            try { localStorage.setItem('buffet_selected', JSON.stringify(STATE.selected)); } catch (e) { }
+        }
+        function loadPersistedSelection() {
+            try {
+                const s = JSON.parse(localStorage.getItem('buffet_selected') || '{}');
+                STATE.selected = s || {};
+                updateCounts();
+                renderPreview();
+            } catch (e) { STATE.selected = {}; }
+        }
+
+        // ---------- actions ----------
+        document.getElementById('clearBtn').addEventListener('click', function () {
+            STATE.selected = {};
+            persistSelection();
+            renderItems();
+            renderPreview();
+            updateCounts();
+        });
+
+        document.getElementById('pdfBtn').addEventListener('click', function () {
+            generatePDF();
+        });
+
+        // ---------- PDF generation (senior-dev quality) ----------
+        function buildPrintableElement() {
+            const container = document.createElement('div');
+            container.className = 'printable';
+
+            // header (title + subtitle)
+            const title = document.createElement('div'); title.className = 'title'; title.textContent = 'The InHoCo';
+            const subtitle = document.createElement('div'); subtitle.className = 'subtitle'; subtitle.textContent = 'Buffet Menu';
+            container.appendChild(title);
+            container.appendChild(subtitle);
+
+            // meta row
+            const meta = document.createElement('div'); meta.className = 'meta-row';
+            const meal = document.getElementById('mealSelect')?.value || STATE.meal || '';
+            const dateVal = document.getElementById('date')?.value || formatDateToIndian(new Date());
+            const pax = safeParseNumber(document.getElementById('pax')?.value);
+            const charge = safeParseNumber(document.getElementById('charge')?.value);
+
+            meta.innerHTML = `
+                <div class="meta-item"><strong>Meal:</strong> <span>${escapeHtml(meal)}</span></div>
+                <div class="meta-item"><strong>Date:</strong> <span>${escapeHtml(dateVal)}</span></div>
+                <div class="meta-item"><strong>Number of Pax:</strong> <span>${escapeHtml(pax || '-')}</span></div>
+                <div class="meta-item"><strong>Charges per Person:</strong> <span>${charge ? formatCurrencyINR(charge) : '-'}</span></div>
+            `;
+            container.appendChild(meta);
+
+            // border-top line below meta
+            const hr = document.createElement('hr');
+            hr.style.border = 'none';
+            hr.style.borderTop = '1px solid #eee';
+            hr.style.margin = '4px 0';
+            container.appendChild(hr);
+
+            // notes box
+            const notesText = document.getElementById('notes')?.value || '';
+            if (notesText) {
+                const notesBox = document.createElement('div');
+                notesBox.className = 'notes-box';
+                notesBox.textContent = `Notes: ${notesText}`;
+                container.appendChild(notesBox);
+            }
+
+            // items grouped by category
+            const grouped = {};
+            Object.values(STATE.selected).forEach(it => {
+                if (!grouped[it.category]) grouped[it.category] = [];
+                grouped[it.category].push(it);
+            });
+
+            if (Object.keys(grouped).length === 0) {
+                const info = document.createElement('div'); info.className = 'muted'; info.textContent = 'No items selected.';
+                container.appendChild(info);
+            } else {
+                Object.keys(grouped).forEach(cat => {
+                    const section = document.createElement('div'); section.className = 'section';
+                    const catTitle = document.createElement('div'); catTitle.className = 'cat-title'; catTitle.textContent = cat;
+                    section.appendChild(catTitle);
+
+                    grouped[cat].forEach(it => {
+                        const row = document.createElement('div'); row.className = 'item-row';
+                        const dot = document.createElement('div'); dot.className = 'dot';
+                        const color = dotColor(it.type);
+                        dot.style.background = color;
+
+                        const nameWrap = document.createElement('div'); nameWrap.className = 'item-name';
+                        nameWrap.textContent = it.name;
+                        nameWrap.style.color = color; // Content color same as dot color
+
+                        row.appendChild(dot);
+                        row.appendChild(nameWrap);
+                        section.appendChild(row);
+                    });
+
+                    container.appendChild(section);
+                });
+            }
+
+            // footer with URL and page number
+            const footer = document.createElement('div'); footer.className = 'footer';
+            const url = document.createElement('div');
+            url.className = 'footer-url';
+            url.textContent = 'https://sites.google.com/theinhoco.com/centralhotels/operations/fb-production/buffet-menu-planning';
+
+            const pageNum = document.createElement('div');
+            pageNum.className = 'page-num';
+            pageNum.textContent = '1/2';
+
+            footer.appendChild(url);
+            footer.appendChild(pageNum);
+            container.appendChild(footer);
+
+            return container;
+        }
+
+        // small HTML escaper for text injected into printable DOM
+        function escapeHtml(s) {
+            if (!s && s !== 0) return '';
+            return String(s).replace(/[&<>"'`]/g, function (m) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' })[m]; });
+        }
+
+        async function generatePDF() {
+            setPdfProcessing(true);
+            const node = buildPrintableElement();
+
+            // Append to body off-screen so html2canvas can "see" it properly
+            // Opacity: 0 and zIndex: -1000 often cause blank captures
+            node.style.position = 'absolute';
+            node.style.left = '-9999px';
+            node.style.top = '0';
+            document.body.appendChild(node);
+
+            const opt = {
+                margin: [8, 8, 8, 8],
+                filename: `Buffet-Menu-${STATE.meal || 'menu'}-${formatDateToIndian(new Date())}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: {
+                    scale: 2,
+                    useCORS: true,
+                    logging: false,
+                    scrollY: 0 // CRITICAL: Fixes whitespace if page is scrolled
+                },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            try {
+                await html2pdf().set(opt).from(node).save();
+            } catch (err) {
+                console.error('PDF error', err);
+                alert('Failed to generate PDF — check console for details.');
+            } finally {
+                try { document.body.removeChild(node); } catch (e) { }
+                setPdfProcessing(false);
+            }
+        }
+
+        // ---------- Flatpickr init ----------
+        function initFlatpickr() {
+            if (window._flatpickr_inited) return;
+            const el = document.getElementById('date');
+            flatpickr(el, {
+                dateFormat: 'd-m-Y',
+                defaultDate: new Date(),
+                onChange: function (selectedDates, dateStr) {
+                    setPreviewHeader();
+                }
+            });
+            window._flatpickr_inited = true;
+            document.getElementById('date').value = formatDateToIndian(new Date());
+        }
+
+        // ---------- INIT ----------
+        (function init() {
+            // prefill
+            document.getElementById('pax').value = '';
+            document.getElementById('charge').value = '';
+            document.getElementById('chef').value = '';
+
+            // load data
+            fetchData(STATE.meal);
+
+            // preview updates
+            ['pax', 'charge', 'chef', 'notes', 'date'].forEach(id => {
+                const node = document.getElementById(id);
+                if (node) node.addEventListener('input', () => setPreviewHeader());
+            });
+
+            // Set today's date in the UI card
+            const todayDateEl = document.getElementById('todayDate');
+            if (todayDateEl) {
+                todayDateEl.textContent = formatDateToIndian(new Date());
+            }
+        })();
+    </script>
+</body>
+
+</html>
