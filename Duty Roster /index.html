@@ -1,1 +1,746 @@
-Duty
+<!doctype html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Duty Roster</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- html2pdf (bundle includes html2canvas + jspdf) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.2/html2pdf.bundle.min.js"></script>
+
+  <style>
+    :root{
+      --card-bg: #fff;
+      --card-border: #e6eef6;
+      --muted: #6b7280;
+      --pill-bg: #f1f5f9;
+      --pill-text: #0f172a;
+      --off-bg: #fee2e2;
+      --off-border: #fecaca;
+      --off-text: #b91c1c;
+      --brand-blue: #1e88e5;
+    }
+
+    body {
+      background: #f3f6f8;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+      color: #0f172a;
+    }
+
+    .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(16,24,40,0.03); }
+    .employee-card { padding: 18px; }
+    .employee-header { display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; flex-wrap:wrap; }
+    .employee-name { font-size: 1.05rem; font-weight: 600; }
+    .employee-role { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+
+    .day-grid { margin-top: 14px; background:#f8fafc; padding:14px; border-radius:6px; }
+    .day-cell { min-width:128px; }
+
+    .shift-select { width:100%; -webkit-appearance: none; -moz-appearance: none; appearance: none; background: var(--card-bg); border: 1px solid #e2e8f0; padding: 6px 8px; border-radius: 6px; font-size: 13px; line-height: 1.1; color: #0f172a; box-shadow: inset 0 -1px 0 rgba(0,0,0,0.02); cursor: pointer; }
+    .day-label { font-size:11px; color:#94a3b8; margin-bottom:6px; display:flex; flex-direction:column; gap:3px; }
+    .shift-select.off { background: var(--off-bg); border-color: var(--off-border); color: var(--off-text); font-weight:600; }
+
+    .top-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+    #loader { font-size: 0.95rem; color: #64748b; }
+
+    /* Publish button + print */
+    .publishBtn { background:var(--brand-blue); color:white; padding:8px 12px; border-radius:6px; display:inline-flex; align-items:center; gap:8px; }
+    .printBtn { background:white; border:1px solid #e2e8f0; padding:8px 12px; border-radius:6px; color:#0f172a; display:inline-flex; align-items:center; gap:8px; }
+
+    /* Top-right toast */
+    .toast {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      background: #111827;
+      color: white;
+      padding: 10px 14px;
+      border-radius: 8px;
+      box-shadow: 0 6px 18px rgba(16,24,40,0.12);
+      z-index: 9999;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    @media (max-width: 780px) { .day-cell { min-width: 102px; } }
+  </style>
+</head>
+<body class="p-6">
+
+  <div class="max-w-6xl mx-auto">
+    <!-- Header card -->
+    <div class="card mb-6">
+      <div class="top-toolbar">
+        <div>
+          <h1 class="text-2xl font-semibold text-gray-800" id="pageTitle">Duty Roster</h1>
+          <p class="text-sm text-gray-500" id="pageSub">Select week & department then press Load.</p>
+        </div>
+
+        <div class="flex gap-3 items-center" id="rightActions">
+          <button id="publishBtn" class="publishBtn hidden" title="Publish roster and save PDF">📤 PUBLISH</button>
+          <button id="printPublishedBtn" class="printBtn hidden" title="View published PDF">🖨️ PRINT / VIEW PDF</button>
+        </div>
+      </div>
+
+      <div class="mt-3 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        <!-- Week -->
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">SELECT WEEK</label>
+          <select id="weekSelect" class="w-full border rounded px-3 py-2"></select>
+        </div>
+
+        <!-- Department -->
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">DEPARTMENT</label>
+          <select id="departmentSelect" class="w-full border rounded px-3 py-2">
+            <option value="">-- Choose Department --</option>
+          </select>
+        </div>
+
+        <!-- Actions (load) -->
+        <div class="flex gap-3 items-center">
+          <button id="loadBtn" class="mt-6 bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded shadow-sm" disabled>
+            LOAD ROSTER
+          </button>
+        </div>
+
+        <div class="flex justify-end gap-3 items-center">
+          <!-- placeholder to keep layout balanced -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Loader -->
+    <div id="loader" class="text-center text-sm text-gray-500 mb-4 hidden">Loading…</div>
+
+    <!-- Container where employee cards will mount -->
+    <div id="employeesContainer" class="space-y-4"></div>
+
+  </div>
+
+  <!-- Toast container (dynamic) -->
+  <div id="toastContainer"></div>
+
+  <script>
+    /* ---------------------------
+       Utilities (frontend)
+    ----------------------------*/
+    function isoDate(d) { return d.toISOString().slice(0,10); }
+    function nowIso() { return (new Date()).toISOString(); }
+
+    function mondayOf(date) {
+      const d = new Date(date);
+      const day = d.getDay(); // 0 Sun - 6 Sat
+      const diff = (day === 0) ? -6 : (1 - day);
+      d.setDate(d.getDate() + diff);
+      d.setHours(0,0,0,0);
+      return d;
+    }
+
+    function getWeekRange(offsetWeeks = 0, baseDate = new Date()) {
+      const mon = mondayOf(new Date(baseDate));
+      mon.setDate(mon.getDate() + (offsetWeeks * 7));
+      const sun = new Date(mon);
+      sun.setDate(mon.getDate() + 6);
+      return { monday: mon, sunday: sun };
+    }
+
+    function formatDayLabel(d) {
+      return d.toLocaleDateString('en-GB', { weekday:'short', day:'2-digit', month:'short' });
+    }
+
+    function formatWeekRange(monday, sunday) {
+      const opt = { day:'2-digit', month:'short', year:'numeric' };
+      return `Week of ${monday.toLocaleDateString('en-GB', opt)} to ${sunday.toLocaleDateString('en-GB', opt)}`;
+    }
+
+    function setLoading(show){ document.getElementById('loader').classList.toggle('hidden', !show); }
+    function clearEmployees(){ document.getElementById('employeesContainer').innerHTML = ''; }
+
+    function showToast(message, timeout = 3200) {
+      const container = document.getElementById('toastContainer');
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.textContent = message;
+      container.appendChild(t);
+      setTimeout(() => {
+        t.style.opacity = '0'; t.style.transition = 'opacity 220ms';
+        setTimeout(()=> t.remove(), 240);
+      }, timeout);
+    }
+
+    /* ---------------------------
+       Demo data (fallback)
+    ----------------------------*/
+    const DEMO_SHIFTS = [
+      { id: '0700-am-to-0500-pm', name: '07:00 am to 05:00 pm' },
+      { id: '0200-pm-to-1000-pm', name: '02:00 pm to 10:00 pm' },
+      { id: '0900-pm-to-0700-am', name: '09:00 pm to 07:00 am' },
+      { id: '0800-am-12pm-0300-pm-0800-pm', name: '08:00 am - 12:00 pm | 03:00 pm - 08:00 pm' },
+      { id: '1000-am-to-0700-pm', name: '10:00 am to 07:00 pm' },
+      { id: 'OFF', name: 'Off' }
+    ];
+
+    const DEMO_EMPLOYEES = [
+      { empName:'Diwkar Rana', empId:'E001', role:'Manager', defaultShift:'0200-pm-to-1000-pm', weeklyOff:'Sun' },
+      { empName:'GYALSTHAN LAMA', empId:'E002', role:'Manager', defaultShift:'0700-am-to-0500-pm', weeklyOff:'Fri' },
+      { empName:'JOHN RAI', empId:'E003', role:'Executive', defaultShift:'0200-pm-to-1000-pm', weeklyOff:'Tue' },
+      { empName:'SRIJANA', empId:'E004', role:'Executive', defaultShift:'0700-am-to-0500-pm', weeklyOff:'Mon' },
+      { empName:'Nikesh Tamang', empId:'E005', role:'Executive', defaultShift:'0900-pm-to-0700-am', weeklyOff:'Sat' }
+    ];
+
+    /* ---------------------------
+       Render helpers & payload builder
+    ----------------------------*/
+    function buildEmployeePayload(card) {
+      const empName = card.querySelector('.dayShiftSelect').dataset.empName;
+      const empId = card.querySelector('.dayShiftSelect').dataset.empId || '';
+      const weeklyOff = card.querySelector('.weeklyOffSelect').value;
+      const defaultShiftId = card.querySelector('.defaultShiftSelect').value;
+      const defaultShiftName = card.querySelector('.defaultShiftSelect').selectedOptions[0].textContent.trim();
+      const role = card.querySelector('.employee-role').textContent.trim();
+
+      const days = [];
+      card.querySelectorAll('.dayShiftSelect').forEach(ds => {
+        days.push({ date: ds.dataset.date, shiftId: ds.value, shiftName: ds.selectedOptions[0].textContent.trim() });
+      });
+
+      return { empName, empId, weeklyOff, defaultShiftId, defaultShiftName, role, days };
+    }
+
+    /* ---------------------------
+       Render employees to UI
+    ----------------------------*/
+    function renderEmployees(data) {
+      const shifts = (data && data.shifts && data.shifts.length) ? data.shifts : DEMO_SHIFTS;
+      const employees = (data && data.employees && data.employees.length) ? data.employees : [];
+      const weekStartIso = (data && data.weekStartIso) ? data.weekStartIso : document.getElementById('weekSelect').value;
+      const weekStart = new Date(weekStartIso);
+
+      clearEmployees();
+
+      // compute 7 dates
+      const days = [];
+      for (let i=0;i<7;i++){
+        const d = new Date(weekStart);
+        d.setDate(weekStart.getDate()+i);
+        days.push(d);
+      }
+
+      // update header title/sub
+      const dept = data && data.department ? data.department : document.getElementById('departmentSelect').value || '';
+      document.getElementById('pageTitle').textContent = (dept ? dept + ' - ' : '') + 'Duty Roster';
+      document.getElementById('pageSub').textContent = formatWeekRange(days[0], days[6]);
+
+      const container = document.getElementById('employeesContainer');
+
+      if (!employees.length) {
+        container.innerHTML = '<div class="text-sm text-gray-500">No employees for this department / week. Use the backend to add employees or load another department.</div>';
+        document.getElementById('publishBtn').classList.add('hidden');
+        document.getElementById('printPublishedBtn').classList.add('hidden');
+        return;
+      }
+
+      // show publish button now roster loaded
+      document.getElementById('publishBtn').classList.remove('hidden');
+      document.getElementById('printPublishedBtn').classList.add('hidden');
+
+      employees.forEach(emp => {
+        const card = document.createElement('div');
+        card.className = 'card employee-card';
+
+        // header region
+        const header = document.createElement('div');
+        header.className = 'employee-header';
+        header.innerHTML = `
+          <div>
+            <div class="employee-name">${emp.empName}</div>
+            <div class="employee-role">${emp.role || ''}</div>
+          </div>
+          <div style="display:flex;gap:1rem;align-items:flex-end;">
+            <div>
+              <label class="text-xs text-gray-500 block">WEEKLY OFF</label>
+              <select class="weeklyOffSelect border rounded px-2 py-1">
+                ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<option ${emp.weeklyOff===d?'selected':''}>${d}</option>`).join('')}
+              </select>
+            </div>
+            <div style="min-width:240px;">
+              <label class="text-xs text-gray-500 block">DEFAULT SHIFT</label>
+              <select class="defaultShiftSelect border rounded px-2 py-1 w-full">
+                ${shifts.map(s=>`<option value="${s.id}" ${emp.defaultShift===s.id?'selected':''}>${s.name}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+        `;
+
+        // body grid
+        const gridWrap = document.createElement('div');
+        gridWrap.className = 'day-grid';
+        const grid = document.createElement('div');
+        grid.className = 'mt-4 grid grid-cols-7 gap-3';
+
+        // build per-day for emp (either supplied emp.days or computed)
+        let empDays = (emp.days && emp.days.length) ? emp.days.slice() : [];
+        if (!empDays.length) {
+          for (let i=0;i<7;i++){
+            const d = new Date(weekStart);
+            d.setDate(weekStart.getDate()+i);
+            const dateIso = isoDate(d);
+            const dayName = d.toLocaleDateString('en-US', { weekday:'short' });
+            const isOff = emp.weeklyOff && (emp.weeklyOff.slice(0,3).toLowerCase() === dayName.slice(0,3).toLowerCase());
+            empDays.push({ date: dateIso, shiftId: isOff ? 'OFF' : (emp.defaultShift || shifts[0].id) });
+          }
+        }
+
+        empDays.forEach((dObj) => {
+          const d = new Date(dObj.date);
+          const dayName = d.toLocaleDateString('en-GB', { weekday:'short' });
+          const dateLabel = d.toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+
+          const selectedShiftId = dObj.shiftId || (emp.defaultShift || shifts[0].id);
+
+          const cell = document.createElement('div');
+          cell.className = 'day-cell';
+
+          cell.innerHTML = `
+            <div class="day-label">
+              <div>${dayName}</div>
+              <div class="text-xs text-gray-400">${dateLabel}</div>
+            </div>
+
+            <select class="dayShiftSelect shift-select ${selectedShiftId==='OFF'?'off':''}">
+              ${shifts.map(s=>`
+                <option value="${s.id}" ${s.id===selectedShiftId?'selected':''}>
+                  ${s.name}
+                </option>
+              `).join('')}
+            </select>
+          `;
+
+          // store metadata
+          const sel = cell.querySelector('.dayShiftSelect');
+          sel.dataset.empName = emp.empName;
+          sel.dataset.empId = emp.empId || '';
+          sel.dataset.date = dObj.date;
+
+          // mark OFF visual on select if needed
+          if (selectedShiftId === 'OFF') sel.classList.add('off');
+
+          grid.appendChild(cell);
+        });
+
+        gridWrap.appendChild(grid);
+        card.appendChild(header);
+        card.appendChild(gridWrap);
+
+        container.appendChild(card);
+      });
+
+      // set up interactions for new DOM
+      document.querySelectorAll('.dayShiftSelect').forEach(sel => {
+        sel.addEventListener('change', (e)=> {
+          if (e.target.value === 'OFF') e.target.classList.add('off');
+          else e.target.classList.remove('off');
+        });
+      });
+
+      document.querySelectorAll('.weeklyOffSelect').forEach((wsel) => {
+        wsel.addEventListener('change', (e) => {
+          const card = e.target.closest('.card');
+          if (!card) return;
+          const newOff = e.target.value;
+          const dayShort = newOff.slice(0,3);
+          card.querySelectorAll('.dayShiftSelect').forEach(ds => {
+            const dayLabel = ds.parentElement.querySelector('.day-label').textContent.trim().slice(0,3);
+            if (dayLabel.toLowerCase() === dayShort.toLowerCase()) {
+              ds.value = 'OFF';
+              ds.dispatchEvent(new Event('change'));
+            } else {
+              // if day was OFF and weeklyOff changed, restore default shift
+              if (ds.value === 'OFF') {
+                const def = card.querySelector('.defaultShiftSelect').value;
+                ds.value = def;
+                ds.dispatchEvent(new Event('change'));
+              }
+            }
+          });
+        });
+      });
+
+      document.querySelectorAll('.defaultShiftSelect').forEach((dsel) => {
+        dsel.addEventListener('change', (e) => {
+          const card = e.target.closest('.card');
+          const newDef = e.target.value;
+          card.querySelectorAll('.dayShiftSelect').forEach(ds => {
+            if (ds.value !== 'OFF') {
+              ds.value = newDef;
+              ds.dispatchEvent(new Event('change'));
+            }
+          });
+        });
+      });
+    }
+
+    /* ---------------------------
+       Integration (load/save/publish/download)
+    ----------------------------*/
+
+    function populateWeekSelect() {
+      const s = document.getElementById('weekSelect');
+      s.innerHTML = '';
+
+      const current = getWeekRange(0);
+      const previous = getWeekRange(-1);
+
+      const labelCur = `This Week (${formatDayLabel(current.monday)} - ${formatDayLabel(current.sunday)})`;
+      const labelPrev = `Previous Week (${formatDayLabel(previous.monday)} - ${formatDayLabel(previous.sunday)})`;
+
+      const optCur = new Option(labelCur, isoDate(current.monday));
+      const optPrev = new Option(labelPrev, isoDate(previous.monday));
+
+      s.add(optCur);
+      s.add(optPrev);
+
+      s.value = isoDate(current.monday);
+    }
+
+    function fetchPublishedPdfAndShow(weekIso, department) {
+      // optional: you can keep a server method to return the latest published PDF for given week+dept
+      // for now we rely on the publish call to return URL and wire print button there.
+    }
+
+    function loadRosterFromBackend() {
+      const weekIso = document.getElementById('weekSelect').value;
+      const department = document.getElementById('departmentSelect').value;
+      clearEmployees();
+      setLoading(true);
+      document.getElementById('publishBtn').classList.add('hidden');
+      document.getElementById('printPublishedBtn').classList.add('hidden');
+
+      if (!department) { setLoading(false); alert('Choose a department first'); return; }
+
+      if (window.google && google.script && google.script.run) {
+        // get shifts first, then employees
+        google.script.run.withSuccessHandler(function(shifts){
+          google.script.run.withSuccessHandler(function(employees){
+            setLoading(false);
+            // ensure defaultShift exists
+            if (!shifts || !shifts.length) shifts = [{ id:'OFF', name:'Off' }];
+            employees.forEach(emp => { if (!emp.defaultShift) emp.defaultShift = shifts[0].id; });
+            renderEmployees({ weekStartIso: weekIso, department, shifts, employees });
+          }).withFailureHandler(function(err){
+            setLoading(false);
+            console.error(err);
+            alert('Error fetching employees. See console.');
+          }).getEmployeesForDepartment(department);
+        }).withFailureHandler(function(err){
+          setLoading(false);
+          console.error(err);
+          alert('Error fetching shifts. See console.');
+        }).getShifts();
+      } else {
+        // demo fallback
+        setTimeout(()=> {
+          setLoading(false);
+          renderEmployees({ weekStartIso: weekIso, department, shifts: DEMO_SHIFTS, employees: DEMO_EMPLOYEES });
+        }, 220);
+      }
+    }
+
+    // Build the final rows to send to server: one row per employee with timestamp, week, dept, name, role, defaultShiftName, weeklyOff, dayMon..daySun
+    function buildPublishRows() {
+      const rows = [];
+      const weekIso = document.getElementById('weekSelect').value;
+      const dept = document.getElementById('departmentSelect').value;
+      const cards = document.querySelectorAll('#employeesContainer .card');
+
+      // build shift id->name map from visible selects
+      const shiftMap = {};
+      document.querySelectorAll('.defaultShiftSelect option').forEach(opt => shiftMap[opt.value] = opt.textContent.trim());
+      // ensure OFF
+      if (!shiftMap['OFF']) shiftMap['OFF'] = 'Off';
+
+      cards.forEach(card => {
+        const payload = buildEmployeePayload(card); // has days with shiftId + shiftName
+        const row = {
+          timestamp: (new Date()).toISOString(),
+          weekStartIso: weekIso,
+          department: dept,
+          empName: payload.empName,
+          empId: payload.empId || '',
+          role: payload.role || '',
+          defaultShiftName: payload.defaultShiftName || shiftMap[payload.defaultShiftId] || payload.defaultShiftId || '',
+          weeklyOff: payload.weeklyOff || '',
+        };
+
+        // Map days Monday..Sunday to dayMon..daySun (or use date as key if you prefer)
+        // Find the weekStart to deduce which day is which
+        const weekStart = new Date(weekIso);
+        for (let i=0;i<7;i++){
+          const d = new Date(weekStart); d.setDate(weekStart.getDate() + i);
+          const dateIso = isoDate(d);
+          const dayKey = ['dayMon','dayTue','dayWed','dayThu','dayFri','daySat','daySun'][i];
+          const dayObj = payload.days.find(dd => dd.date === dateIso);
+          if (dayObj) {
+            // send the human-readable shift name (or "Off")
+            const name = (dayObj.shiftName && dayObj.shiftName.trim()) ? dayObj.shiftName.trim() : (shiftMap[dayObj.shiftId] || dayObj.shiftId);
+            row[dayKey] = name;
+          } else {
+            row[dayKey] = '';
+          }
+        }
+        rows.push(row);
+      });
+
+      return rows;
+    }
+
+    async function publishRoster() {
+      const weekIso = document.getElementById('weekSelect').value;
+      const department = document.getElementById('departmentSelect').value;
+      if (!department) { alert('Choose a department first'); return; }
+
+      // gather roster payload from UI
+      const rows = buildPublishRows();
+      if (!rows.length) { alert('Nothing to publish.'); return; }
+
+      if (!confirm('Publish will save the roster rows to the sheet and save a PDF. Continue?')) return;
+
+      setLoading(true);
+      document.getElementById('publishBtn').disabled = true;
+
+      try {
+        // generate PDF from current DOM using the same visual table style
+        const pdfBlob = await generateRosterPdfBlob({ department, weekIso, rows });
+        const base64 = await blobToBase64(pdfBlob);
+
+        if (window.google && google.script && google.script.run) {
+          // call server publish; server should save rows and PDF, and return { success:true, url }
+          google.script.run.withSuccessHandler(function(res){
+            setLoading(false);
+            document.getElementById('publishBtn').disabled = false;
+            if (res && (res.url || res.success && res.fileUrl)) {
+              const url = (res.url || res.fileUrl);
+              showToast('Published');
+              document.getElementById('printPublishedBtn').classList.remove('hidden');
+              document.getElementById('printPublishedBtn').onclick = () => window.open(url, '_blank');
+            } else {
+              showToast('Published (no URL returned)');
+            }
+          }).withFailureHandler(function(err){
+            setLoading(false);
+            document.getElementById('publishBtn').disabled = false;
+            console.error(err);
+            alert('Publish failed. See console.');
+          }).publishRoster({ weekStartIso: weekIso, department, rows, pdfBase64: base64 });
+        } else {
+          // demo: open the PDF locally and show toast
+          setLoading(false);
+          document.getElementById('publishBtn').disabled = false;
+          const url = URL.createObjectURL(pdfBlob);
+          showToast('Published (demo)');
+          document.getElementById('printPublishedBtn').classList.remove('hidden');
+          document.getElementById('printPublishedBtn').onclick = () => window.open(url, '_blank');
+        }
+      } catch (err) {
+        setLoading(false);
+        document.getElementById('publishBtn').disabled = false;
+        console.error(err);
+        alert('Publish failed during PDF generation. See console.');
+      }
+    }
+
+    /* ---------------------------
+       PDF builder (client-side)
+       builds a printable table (keeps styling close to your screenshot)
+    ----------------------------*/
+    async function generateRosterPdfBlob({ department, weekIso, rows }) {
+      // build document fragment
+      const wrapper = document.createElement('div');
+      wrapper.style.padding = '18px';
+      wrapper.style.background = '#fff';
+      wrapper.className = 'pdf-roster';
+      wrapper.style.fontFamily = 'Arial, Helvetica, sans-serif';
+      wrapper.style.color = '#111827';
+
+      const weekStart = new Date(weekIso);
+      const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
+      const title = document.createElement('div');
+      title.style.textAlign = 'center';
+      title.style.marginBottom = '8px';
+      title.innerHTML = `<div style="font-weight:700; font-size:20px;">${escapeHtml(department || '')} - Duty Roster</div>
+                         <div style="color:#6b7280; margin-top:6px; font-size:12px;">${escapeHtml(formatWeekRange(weekStart, weekEnd))}</div>`;
+      wrapper.appendChild(title);
+
+      // table
+      const table = document.createElement('table');
+      table.style.width = '100%';
+      table.style.borderCollapse = 'collapse';
+      table.style.fontSize = '11px';
+      table.style.marginTop = '8px';
+      table.style.tableLayout = 'fixed';
+
+      // header
+      const thead = document.createElement('thead');
+      const trh = document.createElement('tr');
+
+      const headers = ['Full Name','Role','Weekly Off','Default Shift',
+        ...Array.from({length:7}).map((_,i) => {
+          const d = new Date(weekStart); d.setDate(weekStart.getDate()+i);
+          return d.toLocaleDateString('en-GB', { weekday:'short', day:'2-digit', month:'short' });
+        })
+      ];
+
+      headers.forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        th.style.border = '1px solid #e6eef6';
+        th.style.padding = '8px 6px';
+        th.style.textAlign = 'left';
+        th.style.background = '#f8fafc';
+        th.style.fontWeight = '700';
+        th.style.fontSize = '12px';
+        trh.appendChild(th);
+      });
+      thead.appendChild(trh);
+      table.appendChild(thead);
+
+      // body
+      const tbody = document.createElement('tbody');
+
+      rows.forEach(r => {
+        const tr = document.createElement('tr');
+
+        // name, role, weekly off, default shift
+        const cells = [
+          r.empName || '',
+          r.role || '',
+          r.weeklyOff || '',
+          r.defaultShiftName || ''
+        ];
+        // day columns (dayMon .. daySun)
+        const dayKeys = ['dayMon','dayTue','dayWed','dayThu','dayFri','daySat','daySun'];
+        dayKeys.forEach(k => cells.push(r[k] || ''));
+
+        cells.forEach(val => {
+          const td = document.createElement('td');
+          td.style.border = '1px solid #e6eef6';
+          td.style.padding = '8px 6px';
+          td.style.verticalAlign = 'top';
+          td.style.fontSize = '11px';
+          // highlight Off cells
+          if (String(val).toLowerCase().trim() === 'off') {
+            td.style.background = '#fee2e2';
+            td.style.color = '#7f1d1d';
+            td.style.fontWeight = '700';
+            td.style.textAlign = 'center';
+            td.textContent = 'Off';
+          } else {
+            td.textContent = val;
+          }
+          tr.appendChild(td);
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      wrapper.appendChild(table);
+
+      // generated on text
+      const foot = document.createElement('div');
+      foot.style.textAlign = 'center';
+      foot.style.color = '#6b7280';
+      foot.style.fontSize = '11px';
+      foot.style.marginTop = '10px';
+      const generatedOn = new Date();
+      foot.textContent = `Generated on ${generatedOn.toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' })} at ${generatedOn.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' })}`;
+      wrapper.appendChild(foot);
+
+      // html2pdf options (A4 landscape)
+      const opt = {
+        margin: [8, 8, 8, 8],
+        filename: `${(department || 'roster').replace(/\s+/g,'_')}_roster_${weekIso}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+      };
+
+      // html2pdf returns a Promise-like object; wrap to return Blob
+      return new Promise((resolve, reject) => {
+        try {
+          html2pdf().set(opt).from(wrapper).outputPdf('blob')
+          .then(blob => resolve(blob))
+          .catch(reject);
+        } catch (err) {
+          reject(err);
+        }
+      });
+    }
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = function() {
+          const dataUrl = reader.result;
+          const base64 = dataUrl.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function escapeHtml(str) {
+      if (!str && str !== 0) return '';
+      return String(str).replace(/[&<>"'\/]/g, function (s) {
+        return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;', '/':'&#x2F;' })[s];
+      });
+    }
+
+    /* ---------------------------
+       Events & wiring
+    ----------------------------*/
+    document.addEventListener('DOMContentLoaded', () => {
+      populateWeekSelect();
+
+      // populate departments from server (or demo)
+      const sel = document.getElementById('departmentSelect');
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(function(depts){
+          sel.innerHTML = '<option value="">-- Choose Department --</option>';
+          depts.forEach(d => sel.add(new Option(d.name, d.id || d.name)));
+          document.getElementById('loadBtn').disabled = true;
+        }).getDepartments();
+      } else {
+        sel.innerHTML = '<option value="">-- Choose Department --</option>';
+        ['Front Office','Housekeeping','Security','Maintenance'].forEach(d => sel.add(new Option(d,d)));
+      }
+
+      document.getElementById('departmentSelect').addEventListener('change', (e) => {
+        const val = e.target.value;
+        document.getElementById('loadBtn').disabled = !val;
+        clearEmployees();
+        document.getElementById('publishBtn').classList.add('hidden');
+        document.getElementById('printPublishedBtn').classList.add('hidden');
+      });
+
+      document.getElementById('weekSelect').addEventListener('change', () => {
+        clearEmployees();
+        document.getElementById('publishBtn').classList.add('hidden');
+        document.getElementById('printPublishedBtn').classList.add('hidden');
+      });
+
+      // button wiring
+      document.getElementById('loadBtn').addEventListener('click', loadRosterFromBackend);
+      document.getElementById('publishBtn').addEventListener('click', publishRoster);
+    });
+  </script>
+</body>
+</html>
