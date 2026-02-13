@@ -499,6 +499,40 @@
             display: none !important;
         }
 
+        /* Center loader overlay */
+        .loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .loader-center {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .loader-center .spinner {
+            width: 22px;
+            height: 22px;
+            border: 4px solid rgba(11, 116, 222, 0.15);
+            border-top-color: var(--accent-600);
+        }
+
+        .loader-center .loader-text {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--accent-600);
+        }
+
         /* Printable (PDF) exactness improvements */
         .printable {
             font-family: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
@@ -642,7 +676,7 @@
         <header>
             <div>
                 <h1>F&B Buffet Menu Builder</h1>
-                <p class="muted">Design daily buffet menus from your master item list.</p>
+                <p class="muted">Design daily buffet menus from your  item list.</p>
             </div>
             <div style="display:flex;gap:8px;align-items:center">
                 <button class="btn">Chef View</button>
@@ -705,14 +739,7 @@
                             <!-- RIGHT: SUGGESTED -->
                             <div class="suggested-col">
                                 <div class="small-card">
-                                    <div style="display:flex;justify-content:space-between;align-items:center">
-                                        <div style="font-size:12px;color:var(--muted)">SUGGESTED ITEMS</div>
-                                        <!-- small loader (shown when data loading) -->
-                                        <div id="loader" class="loader hidden" aria-hidden="true">
-                                            <div class="spinner" aria-hidden="true"></div>
-                                            <div style="font-size:12px;color:var(--accent-600)">loading</div>
-                                        </div>
-                                    </div>
+                                    <div style="font-size:12px;color:var(--muted)">SUGGESTED ITEMS</div>
 
                                     <div style="font-weight:700;margin-top:6px" id="suggested">15–20 for Lunch</div>
                                     <hr style="margin:10px 0;border:none;border-top:1px solid #eef3f8" />
@@ -729,7 +756,7 @@
             <!-- content card -->
             <div class="card">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                    <div style="font-weight:700">Pick dishes from master list</div>
+                    <div style="font-weight:700">Pick dishes from  list</div>
                     <div class="muted">Tap to add / remove from today's buffet</div>
                 </div>
 
@@ -809,7 +836,7 @@
         // ---------- STATE ----------
         const STATE = {
             data: {},
-            meal: 'Lunch',
+            meal: '',  // No default meal - user must select
             categories: [],
             activeCategory: '',
             selected: {} // uid -> { meal, category, name, type }
@@ -861,12 +888,24 @@
             return '#27ae60';
         }
 
-        // Loader toggle (small blue)
+        // Loader toggle (centered overlay)
         function showLoader(on) {
-            const loader = document.getElementById('loader');
-            if (!loader) return;
-            if (on) loader.classList.remove('hidden');
-            else loader.classList.add('hidden');
+            let loader = document.getElementById('loaderOverlay');
+            if (on && !loader) {
+                // Create overlay if it doesn't exist
+                loader = document.createElement('div');
+                loader.id = 'loaderOverlay';
+                loader.className = 'loader-overlay';
+                loader.innerHTML = `
+                    <div class="loader-center">
+                        <div class="spinner"></div>
+                        <div class="loader-text">Loading...</div>
+                    </div>
+                `;
+                document.body.appendChild(loader);
+            } else if (!on && loader) {
+                loader.remove();
+            }
         }
 
         // PDF button spinner toggle
@@ -885,7 +924,7 @@
         // ---------- DATA FETCH ----------
         function fetchData(meal) {
             showLoader(true);
-            STATE.meal = meal || STATE.meal || 'Lunch';
+            STATE.meal = meal || STATE.meal || Object.keys(STATE.data)[0] || '';
             // If running with Apps Script available
             if (window.google && google && google.script && google.script.run) {
                 google.script.run.withSuccessHandler(res => {
@@ -1167,19 +1206,21 @@
         }
 
         async function generatePDF() {
+            // if nothing selected, still allow PDF with bill summary
             setPdfProcessing(true);
             const node = buildPrintableElement();
 
-            // Append to body off-screen so html2canvas can "see" it properly
-            // Opacity: 0 and zIndex: -1000 often cause blank captures
-            node.style.position = 'absolute';
-            node.style.left = '-9999px';
-            node.style.top = '0';
+            // append to body so fonts/styles render correctly
             document.body.appendChild(node);
+
+            // Get values from form
+            const dateVal = document.getElementById('date')?.value || formatDateToIndian(new Date());
+            const mealName = document.getElementById('mealSelect')?.value || STATE.meal || 'menu';
+            const filename = `${mealName}-${dateVal}.pdf`;
 
             const opt = {
                 margin: [8, 8, 8, 8],
-                filename: `Buffet-Menu-${STATE.meal || 'menu'}-${formatDateToIndian(new Date())}.pdf`,
+                filename: filename,
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: {
                     scale: 2,
@@ -1192,6 +1233,12 @@
 
             try {
                 await html2pdf().set(opt).from(node).save();
+                // Reset selection after successful PDF generation
+                STATE.selected = {};
+                persistSelection();
+                renderItems();
+                renderPreview();
+                updateCounts();
             } catch (err) {
                 console.error('PDF error', err);
                 alert('Failed to generate PDF — check console for details.');
