@@ -521,8 +521,8 @@
         }
 
         .loader-center .spinner {
-            width: 22px;
-            height: 22px;
+            width: 28px;
+            height: 28px;
             border: 4px solid rgba(11, 116, 222, 0.15);
             border-top-color: var(--accent-600);
         }
@@ -534,16 +534,17 @@
         }
 
         /* Printable (PDF) exactness improvements */
-        .printable {
+     .printable {
             font-family: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
             color: #000;
             background: #fff;
             padding: 40px;
-            width: 794px;
+            width: 720px;
             box-sizing: border-box;
             -webkit-font-smoothing: antialiased;
             line-height: 1.4;
             font-size: 11px;
+            margin: 0 auto;
         }
 
         .printable .title {
@@ -676,7 +677,7 @@
         <header>
             <div>
                 <h1>F&B Buffet Menu Builder</h1>
-                <p class="muted">Design daily buffet menus from your  item list.</p>
+                <p class="muted">Design daily buffet menus from your master item list.</p>
             </div>
             <div style="display:flex;gap:8px;align-items:center">
                 <button class="btn">Chef View</button>
@@ -756,7 +757,7 @@
             <!-- content card -->
             <div class="card">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                    <div style="font-weight:700">Pick dishes from  list</div>
+                    <div style="font-weight:700">Pick dishes from master list</div>
                     <div class="muted">Tap to add / remove from today's buffet</div>
                 </div>
 
@@ -1122,6 +1123,7 @@
             const dateVal = document.getElementById('date')?.value || formatDateToIndian(new Date());
             const pax = safeParseNumber(document.getElementById('pax')?.value);
             const charge = safeParseNumber(document.getElementById('charge')?.value);
+            const totalBill = pax * charge;
 
             meta.innerHTML = `
                 <div class="meta-item"><strong>Meal:</strong> <span>${escapeHtml(meal)}</span></div>
@@ -1182,11 +1184,62 @@
                 });
             }
 
+            // Bill Summary Section
+            // Horizontal line separator
+            const summaryHr = document.createElement('hr');
+            summaryHr.style.border = 'none';
+            summaryHr.style.borderTop = '2px solid #000';
+            summaryHr.style.margin = '30px 0 15px 0';
+            container.appendChild(summaryHr);
+
+            // Bill Summary Title
+            const billSummaryTitle = document.createElement('div');
+            billSummaryTitle.style.fontWeight = '800';
+            billSummaryTitle.style.fontSize = '12px';
+            billSummaryTitle.style.marginBottom = '12px';
+            billSummaryTitle.style.textTransform = 'uppercase';
+            billSummaryTitle.textContent = 'BILL SUMMARY';
+            container.appendChild(billSummaryTitle);
+
+            // Summary rows container
+            const summaryContainer = document.createElement('div');
+            summaryContainer.style.fontSize = '10px';
+            summaryContainer.style.marginBottom = '15px';
+
+            // Rate per Person row
+            const rateRow = document.createElement('div');
+            rateRow.style.display = 'flex';
+            rateRow.style.justifyContent = 'space-between';
+            rateRow.style.marginBottom = '8px';
+            rateRow.innerHTML = `<div><strong>Rate per Person:</strong></div><div style="text-align: right;">${formatCurrencyINR(charge)}</div>`;
+            summaryContainer.appendChild(rateRow);
+
+            // Number of Guests row
+            const guestsRow = document.createElement('div');
+            guestsRow.style.display = 'flex';
+            guestsRow.style.justifyContent = 'space-between';
+            guestsRow.style.marginBottom = '8px';
+            guestsRow.innerHTML = `<div><strong>Number of Guests:</strong></div><div style="text-align: right;">${pax}</div>`;
+            summaryContainer.appendChild(guestsRow);
+
+            // Total Bill Amount row (with emphasis)
+            const totalRow = document.createElement('div');
+            totalRow.style.display = 'flex';
+            totalRow.style.justifyContent = 'space-between';
+            totalRow.style.marginTop = '12px';
+            totalRow.style.paddingTop = '8px';
+            totalRow.style.borderTop = '1px solid #ccc';
+            totalRow.style.fontWeight = '700';
+            totalRow.innerHTML = `<div><strong>Total Bill Amount:</strong></div><div style="text-align: right;">${formatCurrencyINR(totalBill)}</div>`;
+            summaryContainer.appendChild(totalRow);
+
+            container.appendChild(summaryContainer);
+
             // footer with URL and page number
             const footer = document.createElement('div'); footer.className = 'footer';
             const url = document.createElement('div');
             url.className = 'footer-url';
-            url.textContent = 'https://sites.google.com/theinhoco.com/centralhotels/operations/fb-production/buffet-menu-planning';
+            url.textContent = '';
 
             const pageNum = document.createElement('div');
             pageNum.className = 'page-num';
